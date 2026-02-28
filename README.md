@@ -140,6 +140,45 @@ SMTPHook-Golang/
 ```
 
 ---
+## SMTPHook-Golang Flow Diagram
+          ┌───────────────────────────┐
+          │     External Email        │
+          │ (From any mail server)    │
+          └─────────────┬────────────┘
+                        │ SMTP (port 2525)
+                        ▼
+          ┌───────────────────────────┐
+          │        Mailpit            │
+          │ Lightweight SMTP server   │
+          │ Receives raw emails       │
+          └─────────────┬────────────┘
+                        │
+                        ▼
+          ┌───────────────────────────┐
+          │        Parser             │
+          │ - Reads raw email         │
+          │ - Converts to JSON        │
+          │ - Extracts headers/body   │
+          │ - Handles attachments     │
+          └─────────────┬────────────┘
+                        │ JSON payload
+                        ▼
+          ┌───────────────────────────┐
+          │    Webhook Server         │
+          │ - Receives JSON from      │
+          │   parser                  │
+          │ - Sends POST requests to  │
+          │   configured webhook URL  │
+          │ - Handles retries/errors  │
+          └─────────────┬────────────┘
+                        │ Delivery status
+                        ▼
+          ┌───────────────────────────┐
+          │   Logs / Monitoring       │
+          │ - Text logs (or JSON)     │
+          │ - Delivery success/fail   │
+          │ - Timestamp & headers     │
+          └───────────────────────────┘
 
 ## 5. License
 
