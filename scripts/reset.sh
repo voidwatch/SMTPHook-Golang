@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Always run from project root
+cd "$(dirname "$0")/.."
+
 echo "Resetting SMTPHook environment..."
 
 # IMPORTANT: Order matters (remove dependents first)
@@ -26,4 +29,4 @@ echo "🗑 Cleaning logs and test files..."
 rm -f logs/*.log || true
 rm -f email.txt || true
 
-echo "♻️  Reset complete. You can now rerun ./setup.sh"
+echo "♻️  Reset complete. You can now rerun ./scripts/setup.sh"

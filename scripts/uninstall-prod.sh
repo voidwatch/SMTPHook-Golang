@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Always run from project root
+cd "$(dirname "$0")/.."
+
 echo "🛑 Stopping and disabling production services..."
 
 systemctl --user stop container-parser-prod.container || true

@@ -1,7 +1,7 @@
 {
-  "from": "sender@example.com",
-  "to": ["recipient@example.com"],
   "subject": "Test Email",
-  "body": "This is a test message.",
-  "timestamp": "2025-06-17T12:34:56Z"
+  "from": "sender@example.com",
+  "to": "recipient@example.com",
+  "date": "2025-06-17T12:34:56Z",
+  "body": "This is a test message."
 }

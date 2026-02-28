@@ -1,15 +1,17 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/mail"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -33,13 +35,36 @@ type LogEntry struct {
 }
 
 func parseEmail(input string) ParsedEmail {
-	var subject, from, to, date, body string
-	scanner := bufio.NewScanner(strings.NewReader(input))
+	msg, err := mail.ReadMessage(strings.NewReader(input))
+	if err != nil {
+		log.Printf("⚠️ Failed to parse email with net/mail, falling back to manual parse: %v", err)
+		return parseEmailFallback(input)
+	}
 
+	body, err := io.ReadAll(msg.Body)
+	if err != nil {
+		log.Printf("⚠️ Failed to read email body: %v", err)
+	}
+
+	return ParsedEmail{
+		Subject: msg.Header.Get("Subject"),
+		From:    msg.Header.Get("From"),
+		To:      msg.Header.Get("To"),
+		Date:    msg.Header.Get("Date"),
+		Body:    strings.TrimSpace(string(body)),
+	}
+}
+
+// parseEmailFallback is a simple line-based parser used when net/mail fails.
+func parseEmailFallback(input string) ParsedEmail {
+	var subject, from, to, date string
+	var bodyBuilder strings.Builder
+
+	lines := strings.SplitAfter(input, "\n")
 	readBody := false
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "" {
+	for _, line := range lines {
+		line = strings.TrimRight(line, "\r\n")
+		if !readBody && line == "" {
 			readBody = true
 			continue
 		}
@@ -54,7 +79,8 @@ func parseEmail(input string) ParsedEmail {
 				date = strings.TrimSpace(strings.TrimPrefix(line, "Date:"))
 			}
 		} else {
-			body += line + "\n"
+			bodyBuilder.WriteString(line)
+			bodyBuilder.WriteString("\n")
 		}
 	}
 
@@ -63,11 +89,12 @@ func parseEmail(input string) ParsedEmail {
 		From:    from,
 		To:      to,
 		Date:    date,
-		Body:    strings.TrimSpace(body),
+		Body:    strings.TrimSpace(bodyBuilder.String()),
 	}
 }
 
-func postWithRetry(url string, data []byte, maxRetries int, delay time.Duration) error {
+func postWithRetry(url string, data []byte, maxRetries int, initialDelay time.Duration) error {
+	delay := initialDelay
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 		if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -77,20 +104,22 @@ func postWithRetry(url string, data []byte, maxRetries int, delay time.Duration)
 		if resp != nil {
 			resp.Body.Close()
 		}
-		log.Printf("Attempt %d failed. Retrying in %s...", attempt, delay)
+		log.Printf("Attempt %d/%d failed. Retrying in %s...", attempt, maxRetries, delay)
 		time.Sleep(delay)
+		delay *= 2 // exponential backoff
 	}
 	return fmt.Errorf("all %d attempts to POST failed", maxRetries)
 }
 
 func startHealthServer(port string) {
-	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("OK"))
 	})
 	go func() {
-		log.Printf("✅ Health check endpoint running at :%s/health", port)
-		if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Printf("Health check endpoint running at :%s/health", port)
+		if err := http.ListenAndServe(net.JoinHostPort("", port), mux); err != nil {
 			log.Fatalf("Health check server error: %v", err)
 		}
 	}()
@@ -107,18 +136,26 @@ func main() {
 	}
 	logFile, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatalf("❌ Could not open log file: %v", err)
+		log.Fatalf("Could not open log file: %v", err)
 	}
 	defer logFile.Close()
 	log.SetOutput(logFile)
 
 	inputFile := os.Getenv("EMAIL_INPUT_FILE")
+	if inputFile == "" {
+		log.Fatal("EMAIL_INPUT_FILE environment variable is required")
+	}
 	webhookURL := os.Getenv("WEBHOOK_URL")
 	pollInterval := os.Getenv("POLL_INTERVAL")
 	if pollInterval == "" {
 		pollInterval = "10"
 	}
-	intervalSec, _ := time.ParseDuration(pollInterval + "s")
+	intervalSeconds, err := strconv.Atoi(pollInterval)
+	if err != nil || intervalSeconds <= 0 {
+		log.Printf("Invalid POLL_INTERVAL %q, defaulting to 10s", pollInterval)
+		intervalSeconds = 10
+	}
+	intervalDur := time.Duration(intervalSeconds) * time.Second
 
 	healthPort := os.Getenv("HEALTH_PORT")
 	if healthPort == "" {
@@ -129,40 +166,34 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 
-	log.Println("📬 Parser service started. Watching for email input every", intervalSec)
+	log.Println("Parser service started. Watching for email input every", intervalDur)
 
 loop:
 	for {
 		select {
 		case <-stop:
-			log.Println("🛑 Shutting down parser...")
+			log.Println("Shutting down parser...")
 			break loop
 		default:
-			var rawInput string
-			if inputFile != "" {
-				data, err := os.ReadFile(inputFile)
-				if err != nil {
-					log.Printf("⚠️ Failed to read input file: %v", err)
-					time.Sleep(intervalSec)
-					continue
+			data, err := os.ReadFile(inputFile)
+			if err != nil {
+				if !os.IsNotExist(err) {
+					log.Printf("Failed to read input file: %v", err)
 				}
-				if len(data) == 0 {
-					time.Sleep(intervalSec)
-					continue
-				}
-				rawInput = string(data)
-				_ = os.Truncate(inputFile, 0)
-			} else {
-				data, err := io.ReadAll(os.Stdin)
-				if err != nil {
-					log.Printf("⚠️ Failed to read from stdin: %v", err)
-					time.Sleep(intervalSec)
-					continue
-				}
-				rawInput = string(data)
+				time.Sleep(intervalDur)
+				continue
+			}
+			if len(data) == 0 {
+				time.Sleep(intervalDur)
+				continue
 			}
 
-			email := parseEmail(rawInput)
+			// Atomically replace file content to avoid race condition
+			if err := os.WriteFile(inputFile, []byte{}, 0644); err != nil {
+				log.Printf("Failed to clear input file: %v", err)
+			}
+
+			email := parseEmail(string(data))
 			entry := LogEntry{
 				Timestamp: time.Now().Format(time.RFC3339),
 				Service:   "parser",
@@ -172,7 +203,7 @@ loop:
 
 			jsonData, err := json.MarshalIndent(entry, "", "  ")
 			if err != nil {
-				log.Printf("❌ Failed to encode JSON: %v", err)
+				log.Printf("Failed to encode JSON: %v", err)
 				continue
 			}
 
@@ -180,15 +211,15 @@ loop:
 			fmt.Println(string(jsonData))
 
 			if webhookURL != "" {
-				if err := postWithRetry(webhookURL, jsonData, 5, 5*time.Second); err != nil {
-					log.Printf("❌ Failed to POST to webhook: %v", err)
+				if err := postWithRetry(webhookURL, jsonData, 5, 2*time.Second); err != nil {
+					log.Printf("Failed to POST to webhook: %v", err)
 				} else {
-					log.Println("✅ Posted to webhook.")
+					log.Println("Posted to webhook successfully.")
 				}
 			}
-			time.Sleep(intervalSec)
+			time.Sleep(intervalDur)
 		}
 	}
 
-	log.Println("👋 Parser service stopped gracefully.")
+	log.Println("Parser service stopped gracefully.")
 }

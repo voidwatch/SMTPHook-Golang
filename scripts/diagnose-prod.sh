@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Always run from project root
+cd "$(dirname "$0")/.."
+
 echo "🔎 Running SMTPHook production diagnostic..."
 echo ""
 

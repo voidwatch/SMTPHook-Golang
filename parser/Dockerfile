@@ -1,22 +1,29 @@
-FROM docker.io/library/golang:1.21-alpine
+FROM docker.io/library/golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# Optimize build cache
-COPY go.mod go.sum ./
-RUN go mod download
+# Copy go module files and download deps
+COPY go.mod ./
+COPY go.sum* ./
+RUN go mod download || true
 
-# Copy source
+# Copy source and build
 COPY . .
+RUN go mod tidy && go build -o main
 
-# Build binary
-RUN go build -o main
+# --- Runtime stage ---
+FROM docker.io/library/alpine:latest
 
-# Optional default env (can be overridden by `.env`)
-ENV PORT=4000
-ENV LOG_FILE_PATH=logs/output.log
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+WORKDIR /app
 
-# Create logs dir
-RUN mkdir -p /app/logs
+COPY --from=builder /app/main .
+
+RUN mkdir -p /app/logs && chown -R appuser:appgroup /app
+
+USER appuser
+
+ENV PORT=4010
+ENV LOG_FILE_PATH=logs/parser.log
 
 CMD ["./main"]

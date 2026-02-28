@@ -28,20 +28,19 @@ func main() {
 			return
 		}
 
+		defer r.Body.Close()
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "Failed to read body", http.StatusInternalServerError)
 			log.Println("Failed to read body:", err)
 			return
 		}
-		defer r.Body.Close()
 
 		log.Printf("[%s] Received webhook on %s:\n%s\n", time.Now().Format(time.RFC3339), r.URL.Path, string(body))
 		w.WriteHeader(http.StatusOK)
 	}
 
-	// Register all desired routes
-	http.HandleFunc("/", handler)
+	// Register desired routes (no catch-all "/" to avoid matching unrelated requests)
 	http.HandleFunc("/webhook", handler)
 	http.HandleFunc("/event", handler)
 	http.HandleFunc("/receive", handler)

@@ -1,15 +1,26 @@
-# Development-only
-/mailpit/
-/webhook/
-/webhook-server/
+# Build artifacts
+/bin/
+/build/
+
+# Logs
 /logs/*
 !logs/.keep
+
+# Environment files (contain secrets)
+*.env
+!*.env.example
+!*.env.production.example
 
 # Quadlet containers not used in prod
 etc/quadlet/container-*-dev.container
 etc/quadlet/container-mailpit.container
-etc/quadlet/container-webhook.container
-etc/quadlet/container-webhook-server.container
 
-# Generated binaries
-/bin/
+# Mail data
+/mail/
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

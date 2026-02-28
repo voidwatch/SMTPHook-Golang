@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 
+# Always run from project root
+SCRIPT_DIR="$(dirname "$0")"
+cd "$SCRIPT_DIR/.."
+
 COMMAND="$1"
 
 if [ -z "$COMMAND" ]; then
@@ -10,19 +14,19 @@ fi
 
 case "$COMMAND" in
   setup)
-    ./setup-production.sh
+    "$SCRIPT_DIR/setup-production.sh"
     ;;
   run)
-    ./run.sh
+    "$SCRIPT_DIR/run-prod.sh"
     ;;
   reset)
-    ./reset.sh
+    "$SCRIPT_DIR/reset-prod.sh"
     ;;
   uninstall)
-    ./uninstall.sh
+    "$SCRIPT_DIR/uninstall-prod.sh"
     ;;
   diagnose)
-    ./diagnose.sh
+    "$SCRIPT_DIR/diagnose-prod.sh"
     ;;
   *)
     echo "❌ Unknown command: $COMMAND"

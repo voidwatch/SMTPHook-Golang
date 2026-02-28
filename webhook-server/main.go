@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -30,7 +30,8 @@ type LogEntry struct {
 func writeLog(entry LogEntry, logPath string) {
 	file, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatalf("error opening log file: %v", err)
+		log.Printf("error opening log file: %v", err)
+		return
 	}
 	defer file.Close()
 
@@ -49,7 +50,8 @@ func emailHandler(logPath string) http.HandlerFunc {
 			return
 		}
 
-		body, err := ioutil.ReadAll(r.Body)
+		defer r.Body.Close()
+		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read body", http.StatusInternalServerError)
 			return
@@ -63,7 +65,7 @@ func emailHandler(logPath string) http.HandlerFunc {
 
 		entry := LogEntry{
 			Timestamp: time.Now().Format("2006-01-02 15:04:05 MST"),
-			Service:   "webhook",
+			Service:   "webhook-server",
 			Event:     "email_received",
 			Data:      email,
 		}
@@ -74,24 +76,32 @@ func emailHandler(logPath string) http.HandlerFunc {
 }
 
 func main() {
-    // Create logs/ directory if it doesn't exist
-    err := os.MkdirAll("logs", 0755)
-    if err != nil {
-        log.Fatalf("Failed to create logs directory: %v", err)
-    }
+	// Create logs/ directory if it doesn't exist
+	err := os.MkdirAll("logs", 0755)
+	if err != nil {
+		log.Fatalf("Failed to create logs directory: %v", err)
+	}
 	_ = godotenv.Load()
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "4000"
+		port = "4001"
 	}
 
 	logPath := os.Getenv("LOG_FILE_PATH")
 	if logPath == "" {
-		log.Fatal("LOG_FILE_PATH not set in .env")
+		logPath = "logs/webhook-server.log"
+		log.Printf("LOG_FILE_PATH not set, defaulting to %s", logPath)
 	}
 
 	http.HandleFunc("/email", emailHandler(logPath))
+
+	// Health check endpoint
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+
 	fmt.Printf("Webhook server running on port %s\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

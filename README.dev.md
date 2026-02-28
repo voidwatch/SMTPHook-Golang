@@ -33,8 +33,8 @@ cd SMTPHook-Golang
 ### 2. Run setup
 
 ```bash
-chmod +x setup.sh
-./setup.sh
+chmod +x scripts/setup.sh
+./scripts/setup.sh
 ```
 
 ---
@@ -115,12 +115,14 @@ SMTPHook-Golang/
 ├── webhook-server/
 ├── mailpit/
 ├── etc/quadlet/
+├── scripts/
+│   ├── setup.sh
+│   ├── reset.sh
+│   ├── uninstall.sh
+│   ├── diagnose.sh
+│   ├── run.sh
+│   └── ...
 ├── podman-compose.yml
-├── setup.sh
-├── reset.sh
-├── uninstall.sh
-├── diagnose.sh
-├── run.sh
 ```
 
 ---
@@ -128,7 +130,7 @@ SMTPHook-Golang/
 ## Notes
 
 - This is intended for local testing and development.
-- Use `setup-production.sh` for production deployment with only the `parser` service.
+- Use `scripts/setup-production.sh` for production deployment with only the `parser` service.
 
 ---
 

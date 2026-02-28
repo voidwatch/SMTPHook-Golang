@@ -1,16 +1,19 @@
 #!/bin/bash
 set -e
 
+# Always run from project root
+cd "$(dirname "$0")/.."
+
 # Prevent running as root
 if [ "$EUID" -eq 0 ]; then
   echo "Do NOT run this script as root or with sudo."
-  echo "Please run: ./setup-production.sh"
+  echo "Please run: ./scripts/setup-production.sh"
   exit 1
 fi
 
 echo "Verifying you are in the correct project root directory..."
 
-EXPECTED_ITEMS=("parser" "Makefile" "etc" "setup-production.sh")
+EXPECTED_ITEMS=("parser" "Makefile" "etc" "scripts/setup-production.sh")
 
 for item in "${EXPECTED_ITEMS[@]}"; do
   if [ ! -e "$item" ]; then
@@ -64,16 +67,34 @@ fi
 
 # Go version check and optional install
 REQUIRED_GO_VERSION="1.21"
-GO_TARBALL="go1.21.10.linux-amd64.tar.gz"
+
+# Detect architecture
+ARCH=$(uname -m)
+case "$ARCH" in
+  x86_64)  GO_ARCH="amd64" ;;
+  aarch64) GO_ARCH="arm64" ;;
+  armv7l)  GO_ARCH="armv6l" ;;
+  *)       echo "Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+GO_TARBALL="go1.21.10.linux-${GO_ARCH}.tar.gz"
 GO_URL="https://go.dev/dl/$GO_TARBALL"
+
+# Portable version comparison function
+version_lt() {
+  [ "$(printf '%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ] && [ "$1" != "$2" ]
+}
 
 if command -v go &>/dev/null; then
   CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
-  if dpkg --compare-versions "$CURRENT_GO_VERSION" lt "$REQUIRED_GO_VERSION"; then
+  if version_lt "$CURRENT_GO_VERSION" "$REQUIRED_GO_VERSION"; then
     echo "Your Go version is $CURRENT_GO_VERSION, but $REQUIRED_GO_VERSION or later is required."
     read -p "Do you want to uninstall your old Go version and install $REQUIRED_GO_VERSION? [y/N]: " confirm
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-      sudo apt remove -y golang-go || true
+      case $PM in
+        apt) sudo apt remove -y golang-go || true ;;
+        dnf) sudo dnf remove -y golang || true ;;
+        apk) sudo apk del go || true ;;
+      esac
       sudo rm -rf /usr/local/go
       curl -LO "$GO_URL"
       sudo tar -C /usr/local -xzf "$GO_TARBALL"
@@ -106,4 +127,5 @@ echo "Running make build-prod..."
 make build-prod
 
 echo "Production setup complete. You can now run:"
-echo "  podman-compose -f podman-compose-prod.yml up"
+echo "  ./scripts/run-prod.sh"
+echo "  or: podman-compose -f podman-compose-prod.yml up"

@@ -2,6 +2,9 @@
 
 set -e
 
+# Always run from project root
+cd "$(dirname "$0")/.."
+
 echo "Ensuring logs/ exists..."
 mkdir -p logs
 

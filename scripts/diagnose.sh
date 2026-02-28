@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Always run from project root
+cd "$(dirname "$0")/.."
+
 echo "🔎 Running SMTPHook diagnostic..."
 echo ""
 
@@ -31,16 +34,23 @@ for dir in parser webhook webhook-server; do
 done
 echo ""
 
-# Check Quadlet systemd units
-echo "🧠 Checking Quadlet container status..."
+# Check Quadlet systemd units (if configured) or Podman containers
+echo "Checking container status..."
 
 for name in smtp webhook webhook-server parser; do
-  service="container-${name}.service"
-  status=$(systemctl --user is-active "$service" 2>/dev/null || echo "not found")
-  if [ "$status" == "active" ]; then
-    echo "$service is active"
+  # Check podman container first
+  if podman container exists "$name" 2>/dev/null; then
+    status=$(podman inspect --format '{{.State.Status}}' "$name" 2>/dev/null || echo "unknown")
+    echo "Container $name: $status"
   else
-    echo "❌ $service is not active"
+    # Fall back to systemd service check
+    service="container-${name}.service"
+    svc_status=$(systemctl --user is-active "$service" 2>/dev/null || echo "not found")
+    if [ "$svc_status" == "active" ]; then
+      echo "$service is active"
+    else
+      echo "Container $name not found (podman or systemd)"
+    fi
   fi
 done
 echo ""

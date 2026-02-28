@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Always run from project root
+cd "$(dirname "$0")/.."
+
 echo "Verifying you are in the correct project root directory..."
 
 REQUIRED_ITEMS=("parser" "podman-compose-prod.yml" "Makefile")
@@ -77,27 +80,6 @@ fi
 # Create folders if needed
 echo "Creating default mail inbox and logs directory if missing..."
 mkdir -p mail/inbox logs
-
-# === PATCH START: Build parser binary ===
-echo ""
-echo "Building parser binary..."
-
-cd parser
-
-if [ ! -f "go.mod" ]; then
-  echo "Initializing go module..."
-  go mod init github.com/smtphook/parser
-fi
-
-echo "Tidying go modules and generating go.sum..."
-go mod tidy
-
-echo "Building..."
-mkdir -p ../build/parser
-go build -o ../build/parser/parser .
-
-cd ..
-# === PATCH END ===
 
 echo ""
 echo "Container-only setup complete."

@@ -5,9 +5,9 @@ Description=SMTPHook Webhook
 Image=localhost/smtphook-golang_webhook:latest
 Name=webhook
 PublishPort=4000:4000
-WorkingDir=%h/code/SMTPHook-Golang
-Volume=%h/code/SMTPHook-Golang/logs:/app/logs
-Volume=/opt/smtphook/webhook/.env:/app/.env
+# Adjust paths below to match your installation directory
+Volume=%h/smtphook/logs:/app/logs
+Volume=%h/smtphook/webhook/.env:/app/.env
 
 [Install]
 WantedBy=default.target

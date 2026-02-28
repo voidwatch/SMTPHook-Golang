@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Always run from project root
+cd "$(dirname "$0")/.."
+
 echo "🛑 Stopping services..."
 sudo systemctl stop smtphook.target || true
 sudo systemctl stop parser.service || true

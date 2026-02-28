@@ -1,10 +1,3 @@
-# docker-compose.yml or podman-compose.yml section (already containerized)
-  smtp:
-    image: axllent/mailpit
-    container_name: mailpit
-    ports:
-      - "1025:1025"   # SMTP
-      - "8025:8025"   # Web UI/API
-    restart: unless-stopped
-    volumes:
-      - ./logs:/data
+# Mailpit is used via its upstream image in podman-compose.yml.
+# This Dockerfile exists only as a placeholder if a custom build is needed.
+FROM docker.io/axllent/mailpit:latest
